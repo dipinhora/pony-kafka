@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 use "../customlogger"
-use "lib:snappy"
+use "lib:snappy" if not "no-snappy"
 
 use @snappy_validate_compressed_buffer[SnappyStatus](data: Pointer[U8] tag,
   size: USize)
@@ -58,11 +58,9 @@ primitive SnappyDecompressor
 primitive Snappy
   fun read32be(buffer: ByteSeq, offset: USize): U32 ? =>
     ifdef bigendian then
-      (buffer(offset + 3)?.u32() << 24) or (buffer(offset + 2)?.u32() << 16) or
-      (buffer(offset + 1)?.u32() << 8) or buffer(offset + 0)?.u32()
+      buffer.read_u32(offset)?
     else
-      (buffer(offset + 0)?.u32() << 24) or (buffer(offset + 1)?.u32() << 16) or
-      (buffer(offset + 2)?.u32() << 8) or buffer(offset + 3)?.u32()
+      buffer.read_u32(offset)?.bswap()
     end
 
   fun decompress_java(logger: Logger[String], data: ByteSeq): Array[U8] iso^ ? =>

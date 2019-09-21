@@ -1181,10 +1181,8 @@ actor KafkaClient
       let brokers_array: Array[KafkaBrokerConnection tag]
         iso = recover iso brokers_array.create() end
       for (k, v) in _brokers.pairs() do
-        try
-          brokers_list.insert(k, v)?
-          brokers_array.push(v._2)
-        end
+        brokers_list.insert(k, v)
+        brokers_array.push(v._2)
       end
 
       let final_brokers_list: Map[KafkaNodeId, (_KafkaBroker val, KafkaBrokerConnection
@@ -1214,28 +1212,26 @@ actor KafkaClient
         let map_topic_partitions: Map[String, (KafkaTopicType, Set[KafkaPartitionId])] iso =
           recover iso map_topic_partitions.create() end
         for (topic, topic_leader_state) in _topic_leader_state.pairs() do
-          try
-            let map_topic_parts: Set[KafkaPartitionId] iso = recover map_topic_parts.create()
-               end
-            for partition_id in topic_leader_state.keys() do
-              map_topic_parts.set(partition_id)
-            end
-            let ktt: KafkaTopicType =
-              if _conf.producer_topics.contains(topic)
-              and _conf.consumer_topics.contains(topic) then
-                KafkaProduceAndConsume
-              elseif
-                _conf.producer_topics.contains(topic)
-                and not _conf.consumer_topics.contains(topic) then
-                  KafkaProduceOnly
-                elseif not _conf.producer_topics.contains(topic)
-                  and _conf.consumer_topics.contains(topic) then
-                    KafkaConsumeOnly
-                  else
-                    KafkaProduceAndConsume // this should never be reached
-                  end
-            map_topic_partitions.insert(topic, (ktt, consume map_topic_parts))?
+          let map_topic_parts: Set[KafkaPartitionId] iso = recover map_topic_parts.create()
+             end
+          for partition_id in topic_leader_state.keys() do
+            map_topic_parts.set(partition_id)
           end
+          let ktt: KafkaTopicType =
+            if _conf.producer_topics.contains(topic)
+            and _conf.consumer_topics.contains(topic) then
+              KafkaProduceAndConsume
+            elseif
+              _conf.producer_topics.contains(topic)
+              and not _conf.consumer_topics.contains(topic) then
+                KafkaProduceOnly
+              elseif not _conf.producer_topics.contains(topic)
+                and _conf.consumer_topics.contains(topic) then
+                  KafkaConsumeOnly
+                else
+                  KafkaProduceAndConsume // this should never be reached
+                end
+          map_topic_partitions.insert(topic, (ktt, consume map_topic_parts))
         end
 
         _topic_partitions_read_only = consume map_topic_partitions
@@ -1264,33 +1260,33 @@ actor KafkaClient
       if not _conf.producer_topics.contains(topic) then
         continue
       end
-      try
-        let map_topic_part_mapping: Map[KafkaPartitionId, (KafkaBrokerConnection tag | None)] iso = recover
-          map_topic_part_mapping.create() end
-        let set_topic_partitions_throttled: Set[KafkaPartitionId] iso = recover
-          set_topic_partitions_throttled.create() end
-        for (partition_id, (leader_id, throttled, consume_paused)) in
-          topic_leader_state.pairs() do
-          // only include partitions if they were in the provided list or if no topics were provided
+      let map_topic_part_mapping: Map[KafkaPartitionId, (KafkaBrokerConnection tag | None)] iso = recover
+        map_topic_part_mapping.create() end
+      let set_topic_partitions_throttled: Set[KafkaPartitionId] iso = recover
+        set_topic_partitions_throttled.create() end
+      for (partition_id, (leader_id, throttled, consume_paused)) in
+        topic_leader_state.pairs() do
+        // only include partitions if they were in the provided list or if no topics were provided
+        try
           if (_conf.topics(topic)?.partitions.contains(partition_id)) or (_conf.topics(topic)?.partitions.size() == 0) then
             map_topic_part_mapping(partition_id) = if throttled then None else _brokers(leader_id)?._2 end
             if throttled then
               set_topic_partitions_throttled.set(partition_id)
             end
           end
+        else
+          _unrecoverable_error(KafkaErrorReport(ClientErrorShouldNeverHappen(
+            "Error reading topic config and brokers info! " +
+            "This should never happen."),
+            "N/A", -1))
+          return
         end
-        if map_topic_part_mapping.size() > 0 then
-          map_topic_mapping.insert(topic, consume map_topic_part_mapping)?
-        end
-        if set_topic_partitions_throttled.size() > 0 then
-          map_topic_partitions_throttled.insert(topic, consume set_topic_partitions_throttled)?
-        end
-      else
-        _unrecoverable_error(KafkaErrorReport(ClientErrorShouldNeverHappen(
-          "Error updating read only topic mapping! " +
-          "This should never happen."),
-          "N/A", -1))
-        return
+      end
+      if map_topic_part_mapping.size() > 0 then
+        map_topic_mapping.insert(topic, consume map_topic_part_mapping)
+      end
+      if set_topic_partitions_throttled.size() > 0 then
+        map_topic_partitions_throttled.insert(topic, consume set_topic_partitions_throttled)
       end
     end
 

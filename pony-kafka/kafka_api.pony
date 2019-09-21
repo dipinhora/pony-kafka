@@ -1194,6 +1194,9 @@ primitive _KafkaI32Codec
   fun encode(wb: Writer ref, i: I32) =>
     BigEndianEncoder.i32(wb, i)
 
+  fun overwrite_encode(wb: OverwriteableWriter ref, i: I32, pos: USize) ? =>
+    BigEndianEncoder.overwrite_i32(wb, i, pos)?
+
   fun decode(logger: Logger[String], rb: IsoReader ref,
     err_str: String = "Error decoding i32"): I32 ?
   =>
@@ -1616,6 +1619,7 @@ primitive _KafkaProduceV0 is _KafkaProduceApi
     let wb = recover ref PartiallyOverwriteableWriter end
     _KafkaI32Codec.encode(wb, 0)
     try
+      // save first 4 bytes for overwriting once we know final size of data being sent
       wb.save_overwriteable()?
       _KafkaRequestHeader.encode(wb, api_key(), version(), correlation_id, conf)
       encode_request_body(wb, conf, msgs where message_set_version = 0)
@@ -1634,16 +1638,17 @@ primitive _KafkaProduceV0 is _KafkaProduceApi
       // figure out a way to write a full U64 but only increment a subset of bytes? this would be most efficient possibly...
       // maybe change the "save overwriteable" to allow to replace the first `iso` array overall? can add elements/remove elements/etc and  not just overwrite them?
       // maybe allow for the writer to have a "prepend_current" instead of the default "append_current" as an option? although this gets very confusing very quickly
-      _KafkaI32Codec.encode(wb.overwrite, wb.size().i32() - 4)
+      _KafkaI32Codec.overwrite_encode(wb, wb.size().i32() - 4, 0)?
 
-      wb_msg.done()
+      wb.done()
     else
       conf.logger(Error) and conf.logger.log(Error,
-        "Error "saving overwriteable" in write buffer. This should never happen.")
+        "Error 'saving overwriteable' in write buffer. This should never happen.")
 
       // need the equivalent of a `Fail()` or something from wallaroo here
 
-      wb.clear()
+      // clears the write buffer and fall back to normal way of doing this
+      wb.done()
 
       _KafkaRequestHeader.encode(wb, api_key(), version(), correlation_id, conf)
 
@@ -1757,7 +1762,7 @@ primitive _KafkaProduceV0 is _KafkaProduceApi
     while num_elems > 0 do
       (let topic, let produce_response) = decode_topic_produce_response(logger,
         rb)?
-      topics_produce_responses.insert(topic, produce_response)?
+      topics_produce_responses.insert(topic, produce_response)
       num_elems = num_elems - 1
     end
 
@@ -1777,7 +1782,7 @@ primitive _KafkaProduceV0 is _KafkaProduceApi
     while num_elems > 0 do
       (let part, let part_resp) =
         decode_topic_produce_partition_response(logger, rb)?
-      topics_partition_responses.insert(part, part_resp)?
+      topics_partition_responses.insert(part, part_resp)
       num_elems = num_elems - 1
     end
 
@@ -1904,7 +1909,7 @@ primitive _KafkaProduceV2 is _KafkaProduceApi
     while num_elems > 0 do
       (let topic, let produce_response) = decode_topic_produce_response(logger,
         rb)?
-      topics_produce_responses.insert(topic, produce_response)?
+      topics_produce_responses.insert(topic, produce_response)
       num_elems = num_elems - 1
     end
 
@@ -1927,7 +1932,7 @@ primitive _KafkaProduceV2 is _KafkaProduceApi
     while num_elems > 0 do
       (let part, let part_resp) =
         decode_topic_produce_partition_response(logger, rb)?
-      topics_partition_responses.insert(part, part_resp)?
+      topics_partition_responses.insert(part, part_resp)
       num_elems = num_elems - 1
     end
 
@@ -2101,7 +2106,7 @@ primitive _KafkaFetchV0 is _KafkaFetchApi
     while num_elems > 0 do
       (let topic, let fetch_result) = decode_topic_fetch_result(broker_conn,
         check_crc, logger, rb, topics_state)?
-      topics_fetch_results.insert(topic, fetch_result)?
+      topics_fetch_results.insert(topic, fetch_result)
       num_elems = num_elems - 1
     end
 
@@ -2123,7 +2128,7 @@ primitive _KafkaFetchV0 is _KafkaFetchApi
     while num_elems > 0 do
       (let part, let part_resp) = decode_topic_partition_response(broker_conn,
         check_crc, logger, rb, topic, topic_state.partitions_state)?
-      topics_partition_responses.insert(part, part_resp)?
+      topics_partition_responses.insert(part, part_resp)
       num_elems = num_elems - 1
     end
 
@@ -2701,7 +2706,7 @@ primitive _KafkaMetadataV0 is _KafkaMetadataApi
 
     while num_elems > 0 do
       (let topic, let topic_meta) = decode_topic_metadata(logger, rb)?
-      topics_metadata.insert(topic, topic_meta)?
+      topics_metadata.insert(topic, topic_meta)
       num_elems = num_elems - 1
     end
 
@@ -2730,7 +2735,7 @@ primitive _KafkaMetadataV0 is _KafkaMetadataApi
 
     while num_elems > 0 do
       (let part_id, let part_meta) = decode_partition_metadata(logger, rb)?
-      partitions_metadata.insert(part_id, part_meta)?
+      partitions_metadata.insert(part_id, part_meta)
       num_elems = num_elems - 1
     end
 
@@ -2843,7 +2848,7 @@ primitive _KafkaMetadataV1 is _KafkaMetadataApi
 
     while num_elems > 0 do
       (let topic, let topic_meta) = decode_topic_metadata(logger, rb)?
-      topics_metadata.insert(topic, topic_meta)?
+      topics_metadata.insert(topic, topic_meta)
       num_elems = num_elems - 1
     end
 

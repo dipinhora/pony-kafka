@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 use "../customlogger"
-use "lib:lz4"
+use "lib:lz4" if not "no-lz4"
 
 use @LZ4F_compressBound[USize](src_size: USize, prefs_ptr: Pointer[U8])
 use @LZ4F_isError[U32](err: LZ4FError)
