@@ -146,13 +146,13 @@ primitive Error
 
 class val Logger[A]
   let _level: LogLevel
-  let _out: OutStream
+  let _out: (OutStream | SyncOutStream)
   let _f: {(A): String} val
   let _formatter: LogFormatter
   let _verbose: Bool
 
   new val create(level: LogLevel,
-    out: OutStream,
+    out: (OutStream | SyncOutStream),
     f: {(A): String} val,
     verbose: Bool = ifdef debug then true else false end,
     formatter: LogFormatter = DefaultLogFormatter)
@@ -169,17 +169,20 @@ class val Logger[A]
   fun log(level: LogLevel, value: A,
     loc: SourceLoc = __loc): Bool
   =>
-    try
-      let date = PosixDate(Time.seconds()).format("%Y-%m-%d %H:%M:%S")?
-      _out.print(_formatter(level, _f(consume value), _verbose, date, loc))
-      true
-    else
-      false
-    end
+    let t = Time.seconds()
+    let timestr =
+      try
+        PosixDate(t).format("%Y-%m-%d %H:%M:%S")?
+      else
+        t.string()
+      end
+
+    _out.print(_formatter(level, _f(consume value), _verbose, timestr, loc))
+    true
 
 primitive StringLogger
   fun apply(level: LogLevel,
-    out: OutStream,
+    out: (OutStream | SyncOutStream),
     verbose: Bool = ifdef debug then true else false end,
     formatter: LogFormatter = DefaultLogFormatter): Logger[String]
   =>

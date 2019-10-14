@@ -56,17 +56,21 @@ primitive SnappyDecompressor
     Snappy.decompress_java(logger, data)?
 
 primitive Snappy
-  fun read32be(buffer: ByteSeq, offset: USize): U32 ? =>
+  fun read32be(buffer: Array[U8] val, offset: USize): U32 ? =>
     ifdef bigendian then
       buffer.read_u32(offset)?
     else
       buffer.read_u32(offset)?.bswap()
     end
 
-  fun decompress_java(logger: Logger[String], data: ByteSeq): Array[U8] iso^ ? =>
+  fun decompress_java(logger: Logger[String], data_in: ByteSeq): Array[U8] iso^ ? =>
     let snappy_java_hdr_size: USize = 16
     let snappy_java_magic = [as U8: 0x82; 'S'; 'N'; 'A'; 'P'; 'P'; 'Y'; 0]
 
+    let data = match data_in
+               | let x: String => x.array()
+               | let x: Array[U8] val => x
+               end
 
     if data.size() <= (snappy_java_hdr_size + 4) then
       logger(Info) and logger.log(Info, "Not snappy java compressed data " +
